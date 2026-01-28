@@ -1,5 +1,6 @@
 import base64
 import hashlib
+import hmac
 import uuid
 from datetime import datetime, timezone
 
@@ -116,9 +117,31 @@ def create_app():
 
     @app.get("/admin/visits")
     def admin_visits():
+        auth_response = _require_admin_auth()
+        if auth_response:
+            return auth_response
         db = get_db()
         visits = db.visits.find().sort("created_at", -1).limit(50)
         return jsonify([_serialize_visit(visit) for visit in visits])
+
+    @app.get("/admin/stats")
+    def admin_stats():
+        auth_response = _require_admin_auth()
+        if auth_response:
+            return auth_response
+        db = get_db()
+        total = db.visits.count_documents({})
+        started = db.visits.count_documents({"status": "started"})
+        submitted = db.visits.count_documents({"status": "submitted"})
+        completed = db.visits.count_documents({"status": "completed"})
+        return jsonify(
+            {
+                "total": total,
+                "started": started,
+                "submitted": submitted,
+                "completed": completed,
+            }
+        )
 
     return app
 
@@ -139,3 +162,28 @@ def _serialize_visit(visit):
             visit[key] = visit[key].isoformat()
     return visit
 
+
+def _require_admin_auth():
+    auth_header = request.headers.get("Authorization")
+    if not _is_admin_authorized(auth_header):
+        response = jsonify({"error": "unauthorized"})
+        response.status_code = 401
+        response.headers["WWW-Authenticate"] = 'Basic realm="HelloIN Admin"'
+        return response
+    return None
+
+
+def _is_admin_authorized(auth_header):
+    if not auth_header or not auth_header.startswith("Basic "):
+        return False
+    encoded = auth_header.split(" ", 1)[1]
+    try:
+        decoded = base64.b64decode(encoded).decode("utf-8")
+    except (ValueError, UnicodeDecodeError):
+        return False
+    username, separator, password = decoded.partition(":")
+    if not separator:
+        return False
+    return hmac.compare_digest(username, Config.ADMIN_USERNAME) and hmac.compare_digest(
+        password, Config.ADMIN_PASSWORD
+    )
