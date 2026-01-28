@@ -4,6 +4,8 @@ import hmac
 import uuid
 from datetime import datetime, timezone
 
+from bson import ObjectId
+from bson.errors import InvalidId
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 
@@ -142,6 +144,27 @@ def create_app():
                 "completed": completed,
             }
         )
+
+    @app.post("/admin/visits/delete")
+    def admin_delete_visits():
+        auth_response = _require_admin_auth()
+        if auth_response:
+            return auth_response
+        payload = request.get_json(force=True) or {}
+        ids = payload.get("ids", [])
+        if not isinstance(ids, list) or not ids:
+            return jsonify({"error": "ids_required"}), 400
+        object_ids = []
+        for raw_id in ids:
+            try:
+                object_ids.append(ObjectId(raw_id))
+            except (InvalidId, TypeError):
+                continue
+        if not object_ids:
+            return jsonify({"error": "invalid_ids"}), 400
+        db = get_db()
+        result = db.visits.delete_many({"_id": {"$in": object_ids}})
+        return jsonify({"deleted": result.deleted_count})
 
     return app
 
