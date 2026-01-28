@@ -1,0 +1,37 @@
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+
+  backend:
+    build: ./backend
+    environment:
+      - MONGO_URI=mongodb://mongo:27017/helloin
+      - DB_NAME=helloin
+    ports:
+      - "5000:5000"
+    depends_on:
+      - mongo
+
+  frontend:
+    build: ./frontend
+    environment:
+      - VITE_API_BASE_URL=http://localhost:5000
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+
+  seed:
+    build: ./backend
+    command: python seed_demo.py
+    depends_on:
+      - mongo
+    restart: "no"
+
+volumes:
+  mongo_data:
