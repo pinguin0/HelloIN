@@ -159,9 +159,52 @@
 
       <div v-else>
         <div class="admin-actions">
-          <button class="secondary" type="button" @click="refreshAdminData" :disabled="adminLoading">
-            {{ adminLoading ? "Aggiornamento..." : "Aggiorna dati" }}
-          </button>
+          <div class="admin-filters">
+            <div class="form-group">
+              <label for="adminSearch">Ricerca</label>
+              <input
+                id="adminSearch"
+                v-model="adminSearch"
+                type="search"
+                placeholder="Cerca per nome, email, azienda o motivo"
+              />
+            </div>
+            <div class="form-group">
+              <label for="adminStatusFilter">Stato</label>
+              <select id="adminStatusFilter" v-model="adminStatusFilter">
+                <option value="all">Tutti</option>
+                <option value="started">Avviati</option>
+                <option value="submitted">Inviati</option>
+                <option value="completed">Completati</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="adminConsentFilter">Consensi</label>
+              <select id="adminConsentFilter" v-model="adminConsentFilter">
+                <option value="all">Tutti</option>
+                <option value="privacy_yes">Privacy: Sì</option>
+                <option value="privacy_no">Privacy: No</option>
+                <option value="marketing_yes">Marketing: Sì</option>
+                <option value="marketing_no">Marketing: No</option>
+              </select>
+            </div>
+          </div>
+          <div class="admin-action-buttons">
+            <span class="muted">
+              {{ filteredVisits.length }} su {{ adminVisits.length }} registrazioni
+            </span>
+            <button class="secondary" type="button" @click="refreshAdminData" :disabled="adminLoading">
+              {{ adminLoading ? "Aggiornamento..." : "Aggiorna dati" }}
+            </button>
+            <button
+              class="danger"
+              type="button"
+              @click="deleteSelectedVisits"
+              :disabled="adminLoading || selectedVisitIds.length === 0"
+            >
+              Elimina selezionati ({{ selectedVisitIds.length }})
+            </button>
+          </div>
         </div>
 
         <div v-if="adminStats" class="stats-grid">
@@ -187,6 +230,14 @@
           <table>
             <thead>
               <tr>
+                <th class="select-column">
+                  <input
+                    type="checkbox"
+                    :checked="allVisibleSelected"
+                    :aria-checked="allVisibleSelected"
+                    @change="toggleSelectAll($event.target.checked)"
+                  />
+                </th>
                 <th>Visitatore</th>
                 <th>Azienda</th>
                 <th>Contatti</th>
@@ -197,7 +248,14 @@
               </tr>
             </thead>
             <tbody>
-              <tr v-for="visit in adminVisits" :key="visit._id">
+              <tr v-for="visit in filteredVisits" :key="visit._id">
+                <td class="select-column">
+                  <input
+                    type="checkbox"
+                    :checked="selectedVisitIds.includes(visit._id)"
+                    @change="toggleVisitSelection(visit._id)"
+                  />
+                </td>
                 <td>
                   <strong>{{ formatVisitorName(visit) }}</strong>
                   <div class="muted">{{ visit.form_data?.purpose || "N/D" }}</div>
@@ -222,6 +280,9 @@
               </tr>
             </tbody>
           </table>
+          <div v-if="adminVisits.length && filteredVisits.length === 0" class="status info" style="margin-top: 12px">
+            Nessun risultato per i filtri selezionati.
+          </div>
         </div>
         <div v-else class="status info" style="margin-top: 16px">
           Nessun onboarding disponibile.
@@ -268,6 +329,10 @@ const adminVisits = ref([]);
 const adminError = ref("");
 const adminLoading = ref(false);
 const adminAuthHeader = ref("");
+const adminSearch = ref("");
+const adminStatusFilter = ref("all");
+const adminConsentFilter = ref("all");
+const selectedVisitIds = ref([]);
 const activeSection = ref("visitor");
 
 const statusMessage = computed(() => {
@@ -285,6 +350,45 @@ const handleSignature = (dataUrl) => {
 };
 
 const adminAuthenticated = computed(() => Boolean(adminAuthHeader.value));
+
+const filteredVisits = computed(() => {
+  const searchTerm = adminSearch.value.trim().toLowerCase();
+  return adminVisits.value.filter((visit) => {
+    const name = formatVisitorName(visit).toLowerCase();
+    const company = visit.form_data?.company?.toLowerCase() || "";
+    const email = visit.form_data?.email?.toLowerCase() || "";
+    const phone = visit.form_data?.phone?.toLowerCase() || "";
+    const purpose = visit.form_data?.purpose?.toLowerCase() || "";
+    const status = visit.status?.toLowerCase() || "";
+    const matchesSearch = !searchTerm
+      ? true
+      : [name, company, email, phone, purpose, status].some((value) => value.includes(searchTerm));
+
+    const statusFilter = adminStatusFilter.value;
+    const matchesStatus = statusFilter === "all" ? true : visit.status === statusFilter;
+
+    const consentFilter = adminConsentFilter.value;
+    let matchesConsent = true;
+    if (consentFilter === "privacy_yes") {
+      matchesConsent = Boolean(visit.consents?.privacy);
+    } else if (consentFilter === "privacy_no") {
+      matchesConsent = !visit.consents?.privacy;
+    } else if (consentFilter === "marketing_yes") {
+      matchesConsent = Boolean(visit.consents?.marketing);
+    } else if (consentFilter === "marketing_no") {
+      matchesConsent = !visit.consents?.marketing;
+    }
+
+    return matchesSearch && matchesStatus && matchesConsent;
+  });
+});
+
+const allVisibleSelected = computed(() => {
+  if (filteredVisits.value.length === 0) {
+    return false;
+  }
+  return filteredVisits.value.every((visit) => selectedVisitIds.value.includes(visit._id));
+});
 
 const buildAdminAuthHeader = (username, password) => {
   return `Basic ${btoa(`${username}:${password}`)}`;
@@ -305,11 +409,13 @@ const fetchAdminData = async (authHeader) => {
     adminStats.value = statsResponse.data;
     adminVisits.value = visitsResponse.data;
     adminAuthHeader.value = authHeader;
+    selectedVisitIds.value = [];
   } catch (error) {
     adminError.value = "Credenziali non valide o errore di rete.";
     adminStats.value = null;
     adminVisits.value = [];
     adminAuthHeader.value = "";
+    selectedVisitIds.value = [];
   } finally {
     adminLoading.value = false;
   }
@@ -337,6 +443,55 @@ const logoutAdmin = () => {
   adminStats.value = null;
   adminVisits.value = [];
   adminError.value = "";
+  adminSearch.value = "";
+  adminStatusFilter.value = "all";
+  adminConsentFilter.value = "all";
+  selectedVisitIds.value = [];
+};
+
+const toggleVisitSelection = (visitId) => {
+  if (selectedVisitIds.value.includes(visitId)) {
+    selectedVisitIds.value = selectedVisitIds.value.filter((id) => id !== visitId);
+    return;
+  }
+  selectedVisitIds.value = [...selectedVisitIds.value, visitId];
+};
+
+const toggleSelectAll = (shouldSelect) => {
+  if (!shouldSelect) {
+    const visibleIds = filteredVisits.value.map((visit) => visit._id);
+    selectedVisitIds.value = selectedVisitIds.value.filter((id) => !visibleIds.includes(id));
+    return;
+  }
+  const selection = new Set(selectedVisitIds.value);
+  filteredVisits.value.forEach((visit) => selection.add(visit._id));
+  selectedVisitIds.value = Array.from(selection);
+};
+
+const deleteSelectedVisits = async () => {
+  if (!adminAuthHeader.value || selectedVisitIds.value.length === 0) {
+    return;
+  }
+  const confirmed = window.confirm(
+    `Confermi l'eliminazione di ${selectedVisitIds.value.length} registrazioni?`
+  );
+  if (!confirmed) {
+    return;
+  }
+  adminLoading.value = true;
+  adminError.value = "";
+  try {
+    await axios.post(
+      `${apiBaseUrl}/admin/visits/delete`,
+      { ids: selectedVisitIds.value },
+      { headers: { Authorization: adminAuthHeader.value } }
+    );
+    await fetchAdminData(adminAuthHeader.value);
+  } catch (error) {
+    adminError.value = "Impossibile eliminare le registrazioni selezionate.";
+  } finally {
+    adminLoading.value = false;
+  }
 };
 
 const formatVisitorName = (visit) => {
