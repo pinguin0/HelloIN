@@ -8,99 +8,125 @@
       <span class="badge">MVP Demo</span>
     </header>
 
-    <div class="grid">
-      <section class="card">
-        <h2>1. Dati visitatore</h2>
-        <form @submit.prevent="submitVisit">
-          <div class="form-group">
-            <label for="firstName">Nome</label>
-            <input id="firstName" v-model="form.first_name" required />
-          </div>
-          <div class="form-group">
-            <label for="lastName">Cognome</label>
-            <input id="lastName" v-model="form.last_name" required />
-          </div>
-          <div class="form-group">
-            <label for="company">Azienda</label>
-            <input id="company" v-model="form.company" required />
-          </div>
-          <div class="form-group">
-            <label for="email">Email</label>
-            <input id="email" type="email" v-model="form.email" required />
-          </div>
-          <div class="form-group">
-            <label for="phone">Telefono</label>
-            <input id="phone" v-model="form.phone" />
-          </div>
-          <div class="form-group">
-            <label for="purpose">Motivo della visita</label>
-            <textarea id="purpose" v-model="form.purpose"></textarea>
-          </div>
+    <nav class="section-menu" aria-label="Sezioni principali">
+      <button
+        type="button"
+        class="menu-button"
+        :class="{ active: activeSection === 'visitor' }"
+        @click="activeSection = 'visitor'"
+      >
+        Area visitatori
+      </button>
+      <button
+        type="button"
+        class="menu-button"
+        :class="{ active: activeSection === 'admin' }"
+        @click="activeSection = 'admin'"
+      >
+        Area admin
+      </button>
+    </nav>
 
-          <div class="form-group">
-            <label>Consensi</label>
-            <div class="checkbox-row">
-              <input id="privacy" type="checkbox" v-model="consents.privacy" />
-              <label for="privacy">
-                Ho letto e accetto l'informativa privacy (obbligatoria).
-              </label>
+    <div v-if="activeSection === 'visitor'">
+      <div class="grid">
+        <section class="card">
+          <h2>1. Dati visitatore</h2>
+          <form @submit.prevent="submitVisit">
+            <div class="form-group">
+              <label for="firstName">Nome</label>
+              <input id="firstName" v-model="form.first_name" required />
             </div>
-            <div class="checkbox-row">
-              <input id="marketing" type="checkbox" v-model="consents.marketing" />
-              <label for="marketing">Accetto comunicazioni marketing (facoltativo).</label>
+            <div class="form-group">
+              <label for="lastName">Cognome</label>
+              <input id="lastName" v-model="form.last_name" required />
+            </div>
+            <div class="form-group">
+              <label for="company">Azienda</label>
+              <input id="company" v-model="form.company" required />
+            </div>
+            <div class="form-group">
+              <label for="email">Email</label>
+              <input id="email" type="email" v-model="form.email" required />
+            </div>
+            <div class="form-group">
+              <label for="phone">Telefono</label>
+              <input id="phone" v-model="form.phone" />
+            </div>
+            <div class="form-group">
+              <label for="purpose">Motivo della visita</label>
+              <textarea id="purpose" v-model="form.purpose"></textarea>
+            </div>
+
+            <div class="form-group">
+              <label>Consensi</label>
+              <div class="checkbox-row">
+                <input id="privacy" type="checkbox" v-model="consents.privacy" />
+                <label for="privacy">
+                  Ho letto e accetto l'informativa privacy (obbligatoria).
+                </label>
+              </div>
+              <div class="checkbox-row">
+                <input id="marketing" type="checkbox" v-model="consents.marketing" />
+                <label for="marketing">Accetto comunicazioni marketing (facoltativo).</label>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label>Firma digitale</label>
+              <SignaturePad @signed="handleSignature" />
+              <p v-if="signaturePreview" class="status info">Firma acquisita.</p>
+            </div>
+
+            <button class="primary" type="submit" :disabled="loading">
+              {{ loading ? "Invio..." : "Invia dati" }}
+            </button>
+          </form>
+        </section>
+
+        <section class="card">
+          <h2>2. Informativa privacy</h2>
+          <div class="status info" v-if="privacy">
+            <strong>Versione {{ privacy.version }}</strong>
+            <p>{{ privacy.text }}</p>
+          </div>
+          <div v-else class="status info">Caricamento informativa...</div>
+
+          <h2 style="margin-top: 24px">3. Stato onboarding</h2>
+          <div class="timeline">
+            <div class="timeline-item completed">
+              <span class="timeline-dot"></span>
+              <span>Accesso avviato</span>
+            </div>
+            <div class="timeline-item" :class="{ completed: status === 'submitted' || status === 'completed' }">
+              <span class="timeline-dot"></span>
+              <span>Dati e consensi inviati</span>
+            </div>
+            <div class="timeline-item" :class="{ completed: status === 'completed' }">
+              <span class="timeline-dot"></span>
+              <span>Onboarding completato</span>
             </div>
           </div>
 
-          <div class="form-group">
-            <label>Firma digitale</label>
-            <SignaturePad @signed="handleSignature" />
-            <p v-if="signaturePreview" class="status info">Firma acquisita.</p>
+          <div v-if="status === 'completed'" class="status success" style="margin-top: 20px">
+            Grazie! La tua registrazione è stata completata con successo.
+          </div>
+          <div v-else class="status info" style="margin-top: 20px">
+            {{ statusMessage }}
           </div>
 
-          <button class="primary" type="submit" :disabled="loading">
-            {{ loading ? "Invio..." : "Invia dati" }}
+          <button
+            class="secondary"
+            style="margin-top: 16px"
+            @click="completeVisit"
+            :disabled="status !== 'submitted'"
+          >
+            Completa check-in
           </button>
-        </form>
-      </section>
-
-      <section class="card">
-        <h2>2. Informativa privacy</h2>
-        <div class="status info" v-if="privacy">
-          <strong>Versione {{ privacy.version }}</strong>
-          <p>{{ privacy.text }}</p>
-        </div>
-        <div v-else class="status info">Caricamento informativa...</div>
-
-        <h2 style="margin-top: 24px">3. Stato onboarding</h2>
-        <div class="timeline">
-          <div class="timeline-item completed">
-            <span class="timeline-dot"></span>
-            <span>Accesso avviato</span>
-          </div>
-          <div class="timeline-item" :class="{ completed: status === 'submitted' || status === 'completed' }">
-            <span class="timeline-dot"></span>
-            <span>Dati e consensi inviati</span>
-          </div>
-          <div class="timeline-item" :class="{ completed: status === 'completed' }">
-            <span class="timeline-dot"></span>
-            <span>Onboarding completato</span>
-          </div>
-        </div>
-
-        <div v-if="status === 'completed'" class="status success" style="margin-top: 20px">
-          Grazie! La tua registrazione è stata completata con successo.
-        </div>
-        <div v-else class="status info" style="margin-top: 20px">
-          {{ statusMessage }}
-        </div>
-
-        <button class="secondary" style="margin-top: 16px" @click="completeVisit" :disabled="status !== 'submitted'">
-          Completa check-in
-        </button>
-      </section>
+        </section>
+      </div>
     </div>
 
-    <section class="card admin-section">
+    <section v-else class="card admin-section">
       <div class="admin-header">
         <div>
           <h2>Area admin</h2>
@@ -242,6 +268,7 @@ const adminVisits = ref([]);
 const adminError = ref("");
 const adminLoading = ref(false);
 const adminAuthHeader = ref("");
+const activeSection = ref("visitor");
 
 const statusMessage = computed(() => {
   if (status.value === "submitted") {

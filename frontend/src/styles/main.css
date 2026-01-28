@@ -49,6 +49,32 @@ body {
   font-size: 12px;
 }
 
+.section-menu {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  background: #ffffff;
+  padding: 10px;
+  border-radius: 999px;
+  box-shadow: 0 10px 25px rgba(15, 23, 42, 0.08);
+  margin-bottom: 24px;
+}
+
+.menu-button {
+  border: none;
+  border-radius: 999px;
+  padding: 10px 20px;
+  font-weight: 600;
+  cursor: pointer;
+  background: transparent;
+  color: #0f172a;
+}
+
+.menu-button.active {
+  background: #0f172a;
+  color: #fff;
+}
+
 .grid {
   display: grid;
   gap: 24px;
